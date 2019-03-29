@@ -57,6 +57,21 @@ def read(paste_id):
     return text
 
 
+@app.route('/<paste_id>/', methods=['GET'])
+def read_with_guessed_highlignt(paste_id):
+    try:
+        text = load(paste_id)
+    except PasteNotFound:
+        return "no such paste", 404
+    except NoAvailableID:
+        return "no available id: please access later", 503
+    if is_from_browser(request):
+        rendered = colorize(text, formatter=Formatter.HTML)
+        return render_template('paste.html', rendered=rendered)
+    rendered = colorize(text, formatter=Formatter.TERMINAL)
+    return rendered['text']
+
+
 @app.route('/<paste_id>/<lexer_name>', methods=['GET'])
 def read_with_highlight(paste_id, lexer_name):
     try:
