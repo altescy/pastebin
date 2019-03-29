@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            .input-text {
+                width: 100%;
+                height: 256px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div>
+            <pre>TL;DR: curl -F 'f=<-' {{ host }}</pre>
+        </div>
+        <div>
+            <form action="/" method="POST">
+                <textarea class="input-text" type="text" name="f" placeholder="paste your text"></textarea><br>
+                <input type="submit" value="paste it!"/>
+            </form>
+        </div>
+    </body>
+</html>
