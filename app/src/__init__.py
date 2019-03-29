@@ -52,7 +52,7 @@ def read(paste_id):
     except NoAvailableID:
         return "no available id: please access later", 503
     if is_from_browser(request):
-        rendered = colorize(text, formatter=Formatter.HTML)
+        rendered = colorize(text, 'text', formatter=Formatter.HTML)
         return render_template('paste.html', rendered=rendered)
     return text
 
