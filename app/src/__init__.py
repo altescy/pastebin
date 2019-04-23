@@ -129,7 +129,12 @@ def errohandler(err):
 @check_auth
 def index(user):
     if user:
-        limit = request.args.get("limit", 10)
+        limit = request.args.get("limit")
+        try:
+            limit = int(limit) if limit else 10
+        except ValueError:
+            return "`limit` must be integer.", 400
+
         db = get_dbconn()
         pastes = model.get_pastes_by_userid(db, user.id, limit)
         return MANUAL_PASTES.format(
@@ -145,9 +150,9 @@ def index(user):
 @check_auth
 def add_paste_paste(user):
     text = request.form.get('f')
-    public = request.form.get('public')
+    public = request.form.get('public', '0')
 
-    public = bool(int(public)) if public else False
+    public = public == "1"
 
     if not text:
         return "form parameter `f` is required", 400
@@ -251,7 +256,7 @@ def update_paste(token, user):
     if not (text or public):
         return "requires one parameter at least", 400
 
-    public = bool(int(public)) if public else None
+    public = public == "1" if public else None
 
     db = get_dbconn()
     try:
