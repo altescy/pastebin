@@ -170,7 +170,7 @@ def load_paste(token, user):
     except model.PasteNotFound:
         return "no such paste", 404
 
-    permitted = paste.user_id != user.id if user else paste.public
+    permitted = paste.user_id == user.id if user else paste.public
     if not permitted:
         return "permission denied", 403
 
@@ -190,7 +190,7 @@ def read_with_guessed_highlignt(token, user):
     except model.PasteNotFound as e:
         return e.msg, 404
 
-    permitted = paste.user_id != user.id if user else paste.public
+    permitted = paste.user_id == user.id if user else paste.public
     if not permitted:
         return "permission denied"
 
@@ -211,7 +211,7 @@ def read_with_highlight(token, lexer_name, user):
     except model.PasteNotFound:
         return "no such paste", 404
 
-    permitted = paste.user_id != user.id if user else paste.public
+    permitted = paste.user_id == user.id if user else paste.public
     if not permitted:
         return "permission denied"
 
