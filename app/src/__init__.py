@@ -129,7 +129,7 @@ def errohandler(err):
 @check_auth
 def index(user):
     if user:
-        limit = request.args.get("limit", 1000)
+        limit = request.args.get("limit", 10)
         db = get_dbconn()
         pastes = model.get_pastes_by_userid(db, user.id, limit)
         return MANUAL_PASTES.format(
