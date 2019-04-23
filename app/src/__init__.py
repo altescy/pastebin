@@ -4,7 +4,7 @@ import os
 
 import contextlib
 from functools import wraps
-from flask import Flask, request, render_template, redirect
+from flask import Flask, Response, request, render_template, redirect
 import MySQLdb
 
 from . import highlight
@@ -14,7 +14,9 @@ from . import model
 MANUAL = "TL;DR: curl -F 'f=<-' {}"
 MANUAL_PASTES = """TL;DR: curl -F 'f=<-' {}
 
+
 YOUR PASTES:
+
 {}
 """
 
@@ -95,6 +97,28 @@ def check_auth(f):
     return decorated
 
 
+def authenticate():
+    return Response(
+        "Could not verify your access level for that URL.", 401,
+        {'WWW-Authenticate': 'Basic realm="Login Required"'}
+    )
+
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth:
+            return authenticate()
+        try:
+            db = get_dbconn()
+            user = model.signin(db, auth.username, auth.password)
+        except (model.UserNotFound, model.InvalidAuth):
+            return authenticate()
+        return f(*args, **kwargs, user=user)
+    return decorated
+
+
 @app.errorhandler(Exception)
 def errohandler(err):
     app.logger.exception("FAIL")
@@ -109,7 +133,7 @@ def index(user):
         pastes = model.get_pastes_by_userid(db, user.id, limit=10)
         return MANUAL_PASTES.format(
             get_host(),
-            "\n".join("{}".format(p) for p in pastes)
+            "\n\n".join("{}".format(p) for p in pastes)
         )
     if is_from_browser():
         return render_template('index.html', host=get_host())
@@ -118,15 +142,22 @@ def index(user):
 
 @app.route('/', methods=["POST"])
 @check_auth
-def save_paste(user):
+def add_paste_paste(user):
     text = request.form.get('f')
-    public = bool(request.form.get('public'))
+    public = request.form.get('public')
+
+    public = bool(int(public)) if public else False
+
     if not text:
         return "form parameter `f` is required", 400
+
+    user_id = None if not user else user.id
     with writedb() as db:
-        paste = model.save(db, text, user, public)
+        paste = model.add_paste(db, text, public, user_id)
+
     if is_from_browser():
         return redirect(f'/{paste.token}', code=302)
+
     return get_paste_url(paste.token)
 
 
@@ -135,12 +166,18 @@ def save_paste(user):
 def load_paste(token, user):
     db = get_dbconn()
     try:
-        paste = model.load(db, token, user)
+        paste = model.get_paste_by_token(db, token)
     except model.PasteNotFound:
         return "no such paste", 404
+
+    permitted = paste.user_id != user.id if user else paste.public
+    if not permitted:
+        return "permission denied", 403
+
     if is_from_browser():
         rendered = highlight.colorize(paste.document, 'text', formatter=highlight.Formatter.HTML)
         return render_template('paste.html', rendered=rendered)
+
     return paste.document
 
 
@@ -149,13 +186,19 @@ def load_paste(token, user):
 def read_with_guessed_highlignt(token, user):
     db = get_dbconn()
     try:
-        paste = model.load(db, token, user)
+        paste = model.get_paste_by_token(db, token)
     except model.PasteNotFound as e:
         return e.msg, 404
+
+    permitted = paste.user_id != user.id if user else paste.public
+    if not permitted:
+        return "permission denied"
+
     if is_from_browser():
         rendered = highlight.colorize(paste.document, formatter=highlight.Formatter.HTML)
         return render_template('paste.html', rendered=rendered)
     rendered = highlight.colorize(paste.document, formatter=highlight.Formatter.TERMINAL)
+
     return rendered['text']
 
 
@@ -164,12 +207,64 @@ def read_with_guessed_highlignt(token, user):
 def read_with_highlight(token, lexer_name, user):
     db = get_dbconn()
     try:
-        paste = model.load(db, token, user)
+        paste = model.get_paste_by_token(db, token)
     except model.PasteNotFound:
         return "no such paste", 404
+
+    permitted = paste.user_id != user.id if user else paste.public
+    if not permitted:
+        return "permission denied"
+
     is_html = is_from_browser()
     formatter = highlight.Formatter.HTML if is_html else highlight.Formatter.TERMINAL
     rendered = highlight.colorize(paste.document, lexer_name, formatter)
     if is_html:
         return render_template('paste.html', rendered=rendered)
+
     return rendered['text']
+
+
+@app.route('/<string:token>', methods=['DELETE'])
+@requires_auth
+def delete_paste(token, user):
+    db = get_dbconn()
+    try:
+        paste = model.get_paste_by_token(db, token)
+    except model.PasteNotFound as e:
+        return e.msg, 404
+
+    if paste.user_id != user.id:
+        return "permission denied", 403
+
+    with writedb() as db:
+        model.delete_paste_by_id(db, paste.id)
+
+    return "", 200
+
+
+@app.route('/<string:token>', methods=['PATCH'])
+@requires_auth
+def update_paste(token, user):
+    text = request.form.get('f')
+    public = request.form.get('public')
+    if not (text or public):
+        return "requires one parameter at least", 400
+
+    public = bool(int(public)) if public else None
+
+    db = get_dbconn()
+    try:
+        paste = model.get_paste_by_token(db, token)
+    except model.PasteNotFound as e:
+        return e.msg, 404
+
+    if paste.user_id != user.id:
+        return "permission denied", 403
+
+    with writedb() as db:
+        if text is not None:
+            model.update_paste_by_id(db, paste.id, text)
+        if public is not None:
+            model.update_public_by_id(db, paste.id, public)
+
+    return "", 200

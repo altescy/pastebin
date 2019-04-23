@@ -58,27 +58,43 @@ class Paste:
     def __repr__(self):
         token = self.token
         public = "PUBLIC" if self.public else "PRIVATE"
-        created_at = self.created_at
+        updated_at = self.updated_at
         first3lines = "\t" + "\n\t".join(self.document.splitlines()[:3])
-        return f" - {token}:  [{created_at}] {public}\n{first3lines}"
+        return f" - {token}:  [{updated_at}] {public}\n{first3lines}"
 
 
 def generate_id(length):
     return ''.join([random.choice(CHARACTERS) for _ in range(length)])
 
 
+def _get_one_paste(db, query, *args):
+    c = db.cursor()
+    c.execute(query, args)
+    row = c.fetchone()
+    if not row:
+        raise PasteNotFound
+    return Paste(*row)
+
+
+def get_paste_by_id(db, _id: int) -> Paste:
+    return _get_one_paste(db, "SELECT * FROM paste WHERE (id = %s) AND (deleted_at IS NULL)", _id)
+
+
+def get_paste_by_token(db, token: str) -> Paste:
+    return _get_one_paste(db, "SELECT * FROM paste WHERE (token = %s) AND (deleted_at IS NULL)", token)
+
+
 def get_pastes_by_userid(db, user_id: int, limit: int) -> typing.List[Paste]:
     c = db.cursor()
     c.execute(
-        "SELECT * FROM paste WHERE user_id = %s LIMIT %s",
+        "SELECT * FROM paste WHERE (user_id = %s) AND (deleted_at IS NULL) ORDER BY updated_at DESC LIMIT %s",
         (user_id, limit)
     )
     return [Paste(*r) for r in c]
 
 
-def save(db, document: str, user: typing.Optional[user.User], public: bool) -> Paste:
-    user_id = user.id if user else None
-    public = True if not user else public
+def add_paste(db, document: str, public: bool, user_id: typing.Optional[int]) -> Paste:
+    public = True if not user_id else public
     c = db.cursor()
     for _ in range(MAX_GENID_COUNT):
         token = generate_id(PASTE_ID_LENGTH)
@@ -93,22 +109,21 @@ def save(db, document: str, user: typing.Optional[user.User], public: bool) -> P
             break
     else:
         raise NoAvailableID
-    return load(db, token, user)
+    return get_paste_by_token(db, token)
 
 
-def load(db, token: str, user: typing.Optional[user.User]) -> Paste:
+def delete_paste_by_id(db, _id: int):
     c = db.cursor()
-    if user:
-        c.execute(
-            "SELECT * FROM paste WHERE (token = %s) AND (user_id = %s) AND (deleted_at IS NULL)",
-            (token, user.id)
-        )
-    else:
-        c.execute(
-            "SELECT * FROM paste WHERE public AND (token = %s) AND (deleted_at IS NULL)",
-            (token,)
-        )
-    row = c.fetchone()
-    if not row:
-        raise PasteNotFound
-    return Paste(*row)
+    c.execute("UPDATE paste SET deleted_at = NOW(6) WHERE id = %s", (_id,))
+
+
+def update_paste_by_id(db, _id: int, document: str) -> Paste:
+    c = db.cursor()
+    c.execute("UPDATE paste SET document = %s, updated_at = NOW(6) WHERE id = %s", (document, _id))
+    return get_paste_by_id(db, _id)
+
+
+def update_public_by_id(db, _id: int, public: bool) -> Paste:
+    c = db.cursor()
+    c.execute("UPDATE paste SET public = %s, updated_at = NOW(6) WHERE id = %s", (public, _id))
+    return get_paste_by_id(db, _id)
