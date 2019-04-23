@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
 from enum import Enum
 from pygments import highlight
@@ -6,7 +7,9 @@ from pygments.lexers import guess_lexer, get_lexer_by_name
 from pygments.util import ClassNotFound
 from pygments.formatters import HtmlFormatter, TerminalFormatter
 
-from ..utils import LexerNotFound
+
+class LexerNotFound(Exception):
+    msg = "specified lexer name is not found"
 
 
 class Formatter(Enum):
