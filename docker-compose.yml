@@ -35,7 +35,7 @@ services:
             - "MYSQL_ROOT_PASSWORD=root"
         volumes:
             - mysql:/var/lib/mysql
-            - ./mysql:/etc/mysql/conf.d
+            - ./mysql/conf.d:/etc/mysql/conf.d
             - ./sql:/docker-entrypoint-initdb.d
         ports:
             - "13306:3306"
