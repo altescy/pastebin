@@ -51,11 +51,25 @@ def get_paste_url(token):
     return f"{proto}://{host}/{token}"
 
 
+def check_dbconn():
+    global _dbconn
+
+    if _dbconn is None:
+        return False
+
+    try:
+        _dbconn.ping()
+    except MySQLdb.OperationalError: # server timeout
+        return False
+
+    return True
+
+
 def get_dbconn():
     # NOTE: get_dbconn() is not thread safe.  Don't use threaded server.
     global _dbconn
 
-    if _dbconn is None:
+    if not check_dbconn():
         _dbconn = MySQLdb.connect(
             host=dbhost,
             port=int(dbport),
