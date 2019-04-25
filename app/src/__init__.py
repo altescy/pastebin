@@ -102,6 +102,8 @@ def check_auth(f):
         user = None
         auth = request.authorization
         if auth:
+            if not (auth.username and auth.password):
+                return "username and password are required", 400
             with writedb() as db:
                 try:
                     user = model.get_auth(db, auth.username, auth.password)
